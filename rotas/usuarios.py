@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from database import get_engine
-from modelos import Usuario
+from database import get_engine, db
+from modelos import Usuario, Filme, ListaFavoritos
 from odmantic import ObjectId
 
 router = APIRouter(
@@ -60,3 +60,12 @@ async def delete_user(user_id: str) -> dict:
         raise HTTPException(status_code=404, detail="User not found")
     await engine.delete(user)
     return {"message": "User deleted"}
+
+@router.get("/usuarios/{user_id}/favoritos/filmes", response_model=list[Filme])
+async def get_filmes_favoritos(user_id: str) -> list[Filme]:
+    # Aqui filtramos usando o campo "usuario", acessando o id do objeto de usuário
+    lista = await engine.find_one(ListaFavoritos, ListaFavoritos.usuario.id == ObjectId(user_id))
+    if not lista:
+        raise HTTPException(status_code=404, detail="Lista de favoritos não encontrada")
+    # Retornamos diretamente a lista de filmes, que já são objetos Filme
+    return lista.filmes

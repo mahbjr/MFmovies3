@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from database import get_engine
+from database import get_engine, db
 from modelos import Filme
 from odmantic import ObjectId
 
@@ -60,3 +60,64 @@ async def delete_filme(filme_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Filme not found")
     await engine.delete(filme)
     return {"message": "Filme deleted"}
+
+@router.get("/filmes/search")
+async def search_filmes(titulo: str):
+    filmes = await db.filmes.find({
+        "titulo": {"$regex": titulo, "$options": "i"}
+    }).to_list(length=None)
+    return filmes
+
+@router.get("/filmes/ano")
+async def filmes_por_ano(ano: int):
+    filmes = await db.filmes.find({
+        "anoLancamento": {"$gte": ano}
+    }).to_list(length=None)
+    return filmes
+
+@router.get("/filmes/contagem/total")
+async def total_filmes():
+    pipeline = [
+        {"$group": {"_id": None, "totalFilmes": {"$sum": 1}}}
+    ]
+    resultado = await db.filmes.aggregate(pipeline).to_list(length=1)
+    return resultado[0] if resultado else {"totalFilmes": 0}
+
+@router.get("/filmes/contagem/por-genero")
+async def filmes_por_genero():
+    pipeline = [
+        {"$group": {"_id": "$genero", "quantidade": {"$sum": 1}}}
+    ]
+    resultado = await db.filmes.aggregate(pipeline).to_list(length=None)
+    return resultado
+
+@router.get("/filmes/ordenados")
+async def filmes_ordenados():
+    """
+    Retorna todos os filmes cadastrados ordenados por ano de lançamento de forma decrescente.
+    """
+    filmes = await db.filmes.find().sort("anoLancamento", -1).to_list(length=None)
+    return filmes
+
+@router.get("/filmes/avaliacao-media")
+async def filmes_com_media(min_media: float):
+    pipeline = [
+        {"$group": {
+            "_id": "$filme_id",
+            "mediaNota": {"$avg": "$nota"}
+        }},
+        {"$match": {"mediaNota": {"$gt": min_media}}},
+        {"$lookup": {
+            "from": "filmes",
+            "localField": "_id",
+            "foreignField": "_id",
+            "as": "filme"
+        }},
+        {"$unwind": "$filme"},
+        {"$project": {
+            "filme.titulo": 1,
+            "mediaNota": 1
+        }}
+    ]
+    resultado = await db.avaliacoes.aggregate(pipeline).to_list(length=None)
+    return resultado
