@@ -41,16 +41,12 @@ async def create_user(user: Usuario) -> Usuario:
     return user
 
 @router.put("/{user_id}", response_model=Usuario)
-async def update_user(user_id: str, user_data: Usuario) -> Usuario:
-    """
-    Atualiza os dados de um usuário existente.
-    """
+async def update_user(user_id: str, user_data: dict) -> Usuario:
     user = await engine.find_one(Usuario, Usuario.id == ObjectId(user_id))
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    # Atualiza os campos desejados (supondo que o modelo possua 'name' e 'email')
-    user.name = user_data.name
-    user.email = user_data.email
+    for key, value in user_data.items():
+        setattr(user, key, value)
     await engine.save(user)
     return user
 
