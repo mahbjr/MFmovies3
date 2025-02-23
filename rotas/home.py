@@ -8,4 +8,4 @@ router = APIRouter(
 # Home
 @router.get("/")
 async def root():
-    return {"msg": "Bem-vindo ao FastAPI!"}
+    return {"msg": "Bem-vindo ao MF__movies!"}
