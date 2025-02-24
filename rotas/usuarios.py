@@ -25,7 +25,7 @@ async def get_user(user_id: str) -> Usuario:
     """
     user = await engine.find_one(Usuario, Usuario.id == ObjectId(user_id))
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Usuario não encontrado")
     return user
 
 @router.post("/", response_model=Usuario)
@@ -36,7 +36,7 @@ async def create_user(user: Usuario) -> Usuario:
     # Verifica se já existe um usuário com o mesmo e-mail
     existing_user = await engine.find_one(Usuario, Usuario.email == user.email)
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already in use")
+        raise HTTPException(status_code=400, detail="Email já cadastrado")
     await engine.save(user)
     return user
 
@@ -44,7 +44,7 @@ async def create_user(user: Usuario) -> Usuario:
 async def update_user(user_id: str, user_data: dict) -> Usuario:
     user = await engine.find_one(Usuario, Usuario.id == ObjectId(user_id))
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
     for key, value in user_data.items():
         setattr(user, key, value)
     await engine.save(user)
@@ -57,15 +57,29 @@ async def delete_user(user_id: str) -> dict:
     """
     user = await engine.find_one(Usuario, Usuario.id == ObjectId(user_id))
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
     await engine.delete(user)
-    return {"message": "User deleted"}
+    return {"message": "Usuário deletado"}
 
 @router.get("/usuarios/{user_id}/favoritos/filmes", response_model=list[Filme])
 async def get_filmes_favoritos(user_id: str) -> list[Filme]:
-    # Aqui filtramos usando o campo "usuario", acessando o id do objeto de usuário
-    lista = await engine.find_one(ListaFavoritos, ListaFavoritos.usuario.id == ObjectId(user_id))
+    """
+    Retorna a lista de filmes favoritos de um usuário.
+    """
+    # First verify if user exists
+    user = await engine.find_one(Usuario, Usuario.id == ObjectId(user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    # Then find the favorite list using native MongoDB query
+    lista = await db.lista_favoritos.find_one({"usuario_id": ObjectId(user_id)})
     if not lista:
-        raise HTTPException(status_code=404, detail="Lista de favoritos não encontrada")
-    # Retornamos diretamente a lista de filmes, que já são objetos Filme
-    return lista.filmes
+        return []  # Return empty list if no favorites found
+    
+    # Get the films from the list
+    filmes = []
+    if lista.get("filmes"):
+        filme_ids = [ObjectId(filme_id) for filme_id in lista["filmes"]]
+        filmes = await engine.find(Filme, {"_id": {"$in": filme_ids}})
+    
+    return filmes

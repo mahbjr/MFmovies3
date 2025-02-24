@@ -105,5 +105,5 @@ async def avaliacoes_avancadas(threshold: int):
             "usuario.nome": 1
         }}
     ]
-    resultado = await db.avaliacoes.aggregate(pipeline).to_list(length=None)
+    resultado = await db.avaliacao.aggregate(pipeline).to_list(length=None)
     return resultado

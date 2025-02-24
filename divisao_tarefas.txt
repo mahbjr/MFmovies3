@@ -1,0 +1,9 @@
+Divisão de Tarefas
+
+Marcelo:
+Fez a estruturação do projeto com a configuração do mongo atlas, e fez a verificação
+das consultas requeridas e as implementou.
+
+Fernando:
+Fez o CRUD para todas as classes e as funções auxiliares para adicionar e remover 
+filmes de uma lista de favoritos.

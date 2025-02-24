@@ -69,11 +69,18 @@ async def search_filmes(titulo: str):
     """
     query = {"titulo": {"$regex": titulo, "$options": "i"}}
     filmes = await engine.find(Filme, query)
+    if not filmes:
+        raise HTTPException(status_code=404, detail="Nenhum filme encontrado com o título informado")
     return filmes
 
 @router.get("/filmes/ano")
 async def filmes_por_ano(ano: int):
-    filmes = await engine.find(Filme, Filme.anoLancamento == ano)  # Usando o engine com o modelo 'Filme'
+    try:
+        ano = int(ano)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Ano deve ser um integer")
+    
+    filmes = await engine.find(Filme, Filme.anoLancamento == ano)
     return filmes
 
 @router.get("/filmes/contagem/total")
@@ -105,49 +112,38 @@ async def filmes_ordenados(ordem: Literal["asc", "desc"] = "asc"):
     return filmes
 
 
+@router.get("/{filme_id}/avaliacoes")
+async def get_avaliacoes_por_filme(filme_id: str):
+    """
+    Retorna todos os usuários que avaliaram um filme específico, junto com a avaliação que fizeram.
+    """
+    # First check if the movie exists
+    filme = await engine.find_one(Filme, Filme.id == ObjectId(filme_id))
+    if not filme:
+        raise HTTPException(status_code=404, detail="Filme não encontrado")
 
-# @router.get("/filmes/avaliacao-media/{filme_id}")
-# async def avaliacao_media(filme_id: str):
-#     """
-#     Retorna a média das notas de um filme pelo ID.
-#     """
-#     pipeline = [
-#         {"$match": {"filme_id": ObjectId(filme_id)}},
-#         {"$group": {
-#             "_id": "$filme_id",
-#             "mediaNota": {"$avg": "$nota"}
-#         }}
-#     ]
-#     resultado = await db.avaliacao.aggregate(pipeline).to_list(length=1)
-#     if not resultado:
-#         raise HTTPException(status_code=404, detail="Filme not found or no ratings available")
-#     return {"filme_id": filme_id, "mediaNota": resultado[0]["mediaNota"]}
-
-
-
-
-
-
-
-# @router.get("/filmes/min-avaliacao-media")
-# async def filmes_com_media(min_media: float):
-#     pipeline = [
-#         {"$group": {
-#             "_id": "$filme_id",
-#             "mediaNota": {"$avg": "$nota"}
-#         }},
-#         {"$match": {"mediaNota": {"$gt": min_media}}},
-#         {"$lookup": {
-#             "from": "filmes",
-#             "localField": "_id",
-#             "foreignField": "_id",
-#             "as": "filme"
-#         }},
-#         {"$unwind": "$filme"},
-#         {"$project": {
-#             "filme.titulo": 1,
-#             "mediaNota": 1
-#         }}
-#     ]
-#     resultado = await db.avaliacao.aggregate(pipeline).to_list(length=None)
-#     return resultado
+    pipeline = [
+        {"$match": {"filme.id": ObjectId(filme_id)}},  # Alterado de filme_id para filme.id
+        {"$lookup": {
+            "from": "usuarios",
+            "localField": "usuario.id",  # Alterado de usuario_id para usuario.id
+            "foreignField": "_id",
+            "as": "usuario"
+        }},
+        {"$unwind": "$usuario"},
+        {"$project": {
+            "_id": 0,
+            "usuario_nome": "$usuario.nome",
+            "nota": 1,
+            "comentario": 1
+        }}
+    ]
+    
+    resultado = await db.avaliacao.aggregate(pipeline).to_list(length=None)
+    if not resultado:
+        raise HTTPException(
+            status_code=404, 
+            detail="Nenhuma avaliação encontrada para este filme"
+        )
+        
+    return resultado
