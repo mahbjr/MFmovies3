@@ -1,3 +1,4 @@
+from typing import Literal
 from fastapi import APIRouter, HTTPException
 from database import get_engine, db
 from modelos import Filme
@@ -61,63 +62,92 @@ async def delete_filme(filme_id: str) -> dict:
     await engine.delete(filme)
     return {"message": "Filme deleted"}
 
-@router.get("/filmes/search")
+@router.get("/filmes/search", response_model=list[Filme])
 async def search_filmes(titulo: str):
-    filmes = await db.filmes.find({
-        "titulo": {"$regex": titulo, "$options": "i"}
-    }).to_list(length=None)
+    """
+    Busca filmes que contenham o texto informado no título (case insensitive)
+    """
+    query = {"titulo": {"$regex": titulo, "$options": "i"}}
+    filmes = await engine.find(Filme, query)
     return filmes
 
 @router.get("/filmes/ano")
 async def filmes_por_ano(ano: int):
-    filmes = await db.filmes.find({
-        "anoLancamento": {"$gte": ano}
-    }).to_list(length=None)
+    filmes = await engine.find(Filme, Filme.anoLancamento == ano)  # Usando o engine com o modelo 'Filme'
     return filmes
 
 @router.get("/filmes/contagem/total")
-async def total_filmes():
-    pipeline = [
-        {"$group": {"_id": None, "totalFilmes": {"$sum": 1}}}
-    ]
-    resultado = await db.filmes.aggregate(pipeline).to_list(length=1)
-    return resultado[0] if resultado else {"totalFilmes": 0}
+async def count_filmes() -> dict:
+    """
+    Conta o número total de filmes na coleção.
+    """
+    total = await db.filme.count_documents({})
+    return {"totalFilmes": total}
 
 @router.get("/filmes/contagem/por-genero")
 async def filmes_por_genero():
     pipeline = [
         {"$group": {"_id": "$genero", "quantidade": {"$sum": 1}}}
     ]
-    resultado = await db.filmes.aggregate(pipeline).to_list(length=None)
+    resultado = await db.filme.aggregate(pipeline).to_list(length=None)
     return resultado
 
 @router.get("/filmes/ordenados")
-async def filmes_ordenados():
+async def filmes_ordenados(ordem: Literal["asc", "desc"] = "asc"):
     """
-    Retorna todos os filmes cadastrados ordenados por ano de lançamento de forma decrescente.
+    Retorna todos os filmes cadastrados ordenados por ano de lançamento.
+    Pode ser ordenado de forma crescente ou decrescente.
     """
-    filmes = await db.filmes.find().sort("anoLancamento", -1).to_list(length=None)
+    if ordem == "asc":
+        filmes = await engine.find(Filme, sort=Filme.anoLancamento.asc())
+    else:
+        filmes = await engine.find(Filme, sort=Filme.anoLancamento.desc())
     return filmes
 
-@router.get("/filmes/avaliacao-media")
-async def filmes_com_media(min_media: float):
-    pipeline = [
-        {"$group": {
-            "_id": "$filme_id",
-            "mediaNota": {"$avg": "$nota"}
-        }},
-        {"$match": {"mediaNota": {"$gt": min_media}}},
-        {"$lookup": {
-            "from": "filmes",
-            "localField": "_id",
-            "foreignField": "_id",
-            "as": "filme"
-        }},
-        {"$unwind": "$filme"},
-        {"$project": {
-            "filme.titulo": 1,
-            "mediaNota": 1
-        }}
-    ]
-    resultado = await db.avaliacoes.aggregate(pipeline).to_list(length=None)
-    return resultado
+
+
+# @router.get("/filmes/avaliacao-media/{filme_id}")
+# async def avaliacao_media(filme_id: str):
+#     """
+#     Retorna a média das notas de um filme pelo ID.
+#     """
+#     pipeline = [
+#         {"$match": {"filme_id": ObjectId(filme_id)}},
+#         {"$group": {
+#             "_id": "$filme_id",
+#             "mediaNota": {"$avg": "$nota"}
+#         }}
+#     ]
+#     resultado = await db.avaliacao.aggregate(pipeline).to_list(length=1)
+#     if not resultado:
+#         raise HTTPException(status_code=404, detail="Filme not found or no ratings available")
+#     return {"filme_id": filme_id, "mediaNota": resultado[0]["mediaNota"]}
+
+
+
+
+
+
+
+# @router.get("/filmes/min-avaliacao-media")
+# async def filmes_com_media(min_media: float):
+#     pipeline = [
+#         {"$group": {
+#             "_id": "$filme_id",
+#             "mediaNota": {"$avg": "$nota"}
+#         }},
+#         {"$match": {"mediaNota": {"$gt": min_media}}},
+#         {"$lookup": {
+#             "from": "filmes",
+#             "localField": "_id",
+#             "foreignField": "_id",
+#             "as": "filme"
+#         }},
+#         {"$unwind": "$filme"},
+#         {"$project": {
+#             "filme.titulo": 1,
+#             "mediaNota": 1
+#         }}
+#     ]
+#     resultado = await db.avaliacao.aggregate(pipeline).to_list(length=None)
+#     return resultado
