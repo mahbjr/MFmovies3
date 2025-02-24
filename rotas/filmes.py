@@ -1,8 +1,8 @@
 from typing import Literal
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from database import get_engine, db
-from modelos import Filme
-from odmantic import ObjectId
+from modelos import Avaliacao, Filme
+from odmantic import AIOEngine, ObjectId
 
 router = APIRouter(
     prefix="/filmes",  # Prefixo para todas as rotas
@@ -113,37 +113,22 @@ async def filmes_ordenados(ordem: Literal["asc", "desc"] = "asc"):
 
 
 @router.get("/{filme_id}/avaliacoes")
-async def get_avaliacoes_por_filme(filme_id: str):
+async def listar_avaliacoes_filme(filme_id: str, engine: AIOEngine = Depends(get_engine)):
     """
-    Retorna todos os usuários que avaliaram um filme específico, junto com a avaliação que fizeram.
+    Retorna todas as avaliações de um filme específico, pelo ID do filme.
     """
-    # First check if the movie exists
+    # Verificar se o filme existe
     filme = await engine.find_one(Filme, Filme.id == ObjectId(filme_id))
     if not filme:
         raise HTTPException(status_code=404, detail="Filme não encontrado")
-
-    pipeline = [
-        {"$match": {"filme.id": ObjectId(filme_id)}},  # Alterado de filme_id para filme.id
-        {"$lookup": {
-            "from": "usuarios",
-            "localField": "usuario.id",  # Alterado de usuario_id para usuario.id
-            "foreignField": "_id",
-            "as": "usuario"
-        }},
-        {"$unwind": "$usuario"},
-        {"$project": {
-            "_id": 0,
-            "usuario_nome": "$usuario.nome",
-            "nota": 1,
-            "comentario": 1
-        }}
-    ]
     
-    resultado = await db.avaliacao.aggregate(pipeline).to_list(length=None)
-    if not resultado:
+    # Buscar todas as avaliações associadas ao filme pelo filme_id
+    avaliacoes = await engine.find(Avaliacao, Avaliacao.filme == filme.id)
+
+    if not avaliacoes:
         raise HTTPException(
-            status_code=404, 
+            status_code=404,
             detail="Nenhuma avaliação encontrada para este filme"
         )
-        
-    return resultado
+    
+    return avaliacoes

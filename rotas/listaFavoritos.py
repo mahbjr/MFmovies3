@@ -101,4 +101,6 @@ async def remove_filme_from_lista(lista_id: str, filme_id: str) -> ListaFavorito
     if filme in lista.filmes:
         lista.filmes.remove(filme)
         await engine.save(lista)
+    else:
+        raise HTTPException(status_code=404, detail="Filme não encontrado na lista de favoritos")
     return lista

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from database import get_engine, db
-from modelos import Usuario, Filme, ListaFavoritos
+from database import get_engine
+from modelos import Avaliacao, Usuario
 from odmantic import ObjectId
 
 router = APIRouter(
@@ -59,27 +59,62 @@ async def delete_user(user_id: str) -> dict:
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     await engine.delete(user)
-    return {"message": "Usuário deletado"}
+    return {"message": "Usuário deletado"}  
 
-@router.get("/usuarios/{user_id}/favoritos/filmes", response_model=list[Filme])
-async def get_filmes_favoritos(user_id: str) -> list[Filme]:
+@router.get("/avaliacoes/filmes-usuarios")
+async def avaliacoes_avancadas(limite: int, skip: int = 0, limit: int = 10):
     """
-    Retorna a lista de filmes favoritos de um usuário.
+    Retorna avaliações com nota acima do limite especificado.
     """
-    # First verify if user exists
-    user = await engine.find_one(Usuario, Usuario.id == ObjectId(user_id))
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    collection = engine.get_collection(Avaliacao)
 
-    # Then find the favorite list using native MongoDB query
-    lista = await db.lista_favoritos.find_one({"usuario_id": ObjectId(user_id)})
-    if not lista:
-        return []  # Return empty list if no favorites found
+    pipeline = [
+        {"$match": {"nota": {"$gt": limite}}},
+        {"$lookup": {
+            "from": "filme",
+            "localField": "filme",
+            "foreignField": "_id",
+            "as": "filme_info"
+        }},
+        {"$lookup": {
+            "from": "usuario",
+            "localField": "usuario",
+            "foreignField": "_id",
+            "as": "usuario_info"
+        }},
+        {"$unwind": {
+            "path": "$filme_info",
+            "preserveNullAndEmptyArrays": True
+        }},
+        {"$unwind": {
+            "path": "$usuario_info",
+            "preserveNullAndEmptyArrays": True
+        }},
+        {"$project": {
+            "_id": 0,
+            "nota": 1,
+            "comentario": 1,
+            "filme": {
+                "titulo": "$filme_info.titulo",
+                "diretor": "$filme_info.diretor",
+                "anoLancamento": "$filme_info.anoLancamento",
+                "genero": "$filme_info.genero"
+            },
+            "usuario": {
+                "nome": "$usuario_info.nome",
+                "email": "$usuario_info.email"
+            }
+        }},
+        {"$skip": skip},
+        {"$limit": limit}
+    ]
     
-    # Get the films from the list
-    filmes = []
-    if lista.get("filmes"):
-        filme_ids = [ObjectId(filme_id) for filme_id in lista["filmes"]]
-        filmes = await engine.find(Filme, {"_id": {"$in": filme_ids}})
+    resultado = await collection.aggregate(pipeline).to_list(length=None)
     
-    return filmes
+    if not resultado:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Nenhuma avaliação encontrada com nota maior que {limite}"
+        )
+    
+    return resultado

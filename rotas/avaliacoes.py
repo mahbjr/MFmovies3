@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from database import get_engine, db
+from database import get_engine
 from modelos import Avaliacao, Filme, Usuario
 from odmantic import ObjectId
 
@@ -80,30 +80,3 @@ async def delete_avaliacao(avaliacao_id: str) -> dict:
     await engine.delete(avaliacao)
     return {"message": "Avaliacao deleted"}
 
-@router.get("/avaliacoes/filmes-usuarios")
-async def avaliacoes_avancadas(threshold: int):
-    pipeline = [
-        {"$match": {"nota": {"$gt": threshold}}},
-        {"$lookup": {
-            "from": "filmes",
-            "localField": "filme_id",
-            "foreignField": "_id",
-            "as": "filme"
-        }},
-        {"$lookup": {
-            "from": "usuarios",
-            "localField": "usuario_id",
-            "foreignField": "_id",
-            "as": "usuario"
-        }},
-        {"$unwind": "$filme"},
-        {"$unwind": "$usuario"},
-        {"$project": {
-            "nota": 1,
-            "comentario": 1,
-            "filme.titulo": 1,
-            "usuario.nome": 1
-        }}
-    ]
-    resultado = await db.avaliacao.aggregate(pipeline).to_list(length=None)
-    return resultado

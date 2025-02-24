@@ -16,7 +16,7 @@ class Usuario(Model):
 class ListaFavoritos(Model):
     nome: str
     usuario: Usuario = Reference()  # Associação: cada lista pertence a um usuário
-    filmes: List[Filme] = []         # Associação muitos-para-muitos com Filme
+    filmes: List[Filme] = []         # Associação: muitos-para-muitos com Filme
 
 class Avaliacao(Model):
     nota: int
